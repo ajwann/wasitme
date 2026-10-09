@@ -1,0 +1,8 @@
+{
+  "description": "wasitme: point failing test runs at a baseline comparison",
+  "hooks": {
+    "PostToolUseFailure": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.py"], "timeout": 10}]}
+    ]
+  }
+}

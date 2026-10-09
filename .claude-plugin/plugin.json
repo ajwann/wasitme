@@ -1,0 +1,18 @@
+{
+  "name": "wasitme",
+  "version": "0.1.0",
+  "description": "Answers 'did my change break this?' by re-running a failing test command on the base commit in a temporary git worktree and sorting failures into introduced and pre-existing.",
+  "author": {
+    "name": "Adam Wanninger",
+    "email": "adam@awanninger.com"
+  },
+  "homepage": "https://github.com/ajwann/wasitme",
+  "repository": "https://github.com/ajwann/wasitme",
+  "license": "MIT",
+  "keywords": [
+    "testing",
+    "git",
+    "regressions",
+    "hooks"
+  ]
+}

@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""wasitme: did my change break this?
+
+    wasitme [--base REF] [--fresh] [--timeout S] [--json] -- <command>
+
+Runs <command> in the current tree and on REF (default HEAD; a branch name means its merge-base
+with HEAD) inside a temporary git worktree, then sorts failures into introduced / pre-existing / fixed.
+Base results are cached per commit, so repeat checks only re-run the current tree.
+"""
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import hookio  # noqa: E402
+from wasitme.core import DEFAULTS, PLUGIN, baseline, compare, git, report, resolve_base, run_shell  # noqa: E402
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    if "--" in argv:
+        i = argv.index("--")
+        opts, cmd = argv[:i], argv[i + 1:]
+    else:
+        opts, cmd = [], argv
+    ap = argparse.ArgumentParser(prog="wasitme", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--base", default="HEAD")
+    ap.add_argument("--fresh", action="store_true", help="ignore the cached base result")
+    ap.add_argument("--timeout", type=int)
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(opts)
+    if not cmd:
+        ap.error("give the command after --, e.g. wasitme -- npm test")
+    command = cmd[0] if len(cmd) == 1 else " ".join(cmd)
+    cwd = Path.cwd()
+    try:
+        root = Path(git(cwd, "rev-parse", "--show-toplevel").strip())
+    except RuntimeError as e:
+        print(f"wasitme: not a git repository ({e})", file=sys.stderr)
+        return 2
+    cfg = hookio.load_config(PLUGIN, root, DEFAULTS)
+    if a.timeout:
+        cfg["timeout_s"] = a.timeout
+    sha, label = resolve_base(root, a.base)
+    if label == "HEAD" and not git(root, "status", "--porcelain", "--untracked-files=no").strip():
+        print("wasitme: no uncommitted changes, so HEAD is the current tree. Try --base HEAD~1 or --base main.")
+        return 2
+    rel = os.path.relpath(cwd, root)
+    print(f"wasitme: running on the current tree…", file=sys.stderr)
+    cur = run_shell(command, cwd, int(cfg["timeout_s"]))
+    print(f"wasitme: running on {label} ({sha[:9]}) in a temporary worktree…", file=sys.stderr)
+    base = baseline(root, sha, command, rel, cfg, fresh=a.fresh)
+    if a.json:
+        print(json.dumps({"base": {"ref": label, "sha": sha, **{k: base[k] for k in ("exit", "failures", "cached")}},
+                          "current": {k: cur[k] for k in ("exit", "failures")}, **compare(base, cur)}, indent=2))
+    else:
+        print(report(command, label, sha, base, cur))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
